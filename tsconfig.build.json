@@ -15,10 +15,10 @@
       "es2015.iterable",
       "dom"
     ],
-    "paths": {
-      "afspawnservice": ["src/index.ts"]
-    },
     "strict": true,
+    "paths": {
+      "afspawnservice": [ "./src/index.ts" ]
+    },
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "noUnusedLocals": true,
@@ -32,7 +32,8 @@
   ],
   "exclude": [
     "node_modules",
-    "lib"
+    "lib",
+    "**/*.spec.ts"
   ],
   "angularCompilerOptions": {
     "strictMetadataEmit": true,
