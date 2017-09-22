@@ -1,91 +1,86 @@
 import {
-  Injectable, ViewContainerRef, ComponentFactoryResolver, ApplicationRef, Injector,
-  ComponentFactory
+  Injectable,
+  ViewContainerRef,
+  ComponentFactoryResolver,
+  ApplicationRef,
+  Injector,
+  ComponentFactory,
+  ComponentRef
 } from '@angular/core';
-import {BehaviorSubject, Subscription} from "rxjs";
-import {getSymbolObservable} from "rxjs/symbol/observable";
-import {SpawnReference} from "./interfaces/SpawnReference";
+import { BehaviorSubject } from 'rxjs/BehaviorSubject';
+import { Subscription } from 'rxjs/Subscription';
+import { getSymbolObservable } from 'rxjs/symbol/observable';
+import { SpawnReference } from './interfaces/SpawnReference';
 
 @Injectable()
 export class AFSpawnService {
 
-
   constructor(
-    private cfr: ComponentFactoryResolver
-    , private appRef: ApplicationRef
-    , private injector: Injector
+    private cfr: ComponentFactoryResolver,
+    private appRef: ApplicationRef,
+    private injector: Injector
   ) { }
 
-  createComponent(type: any, vcr?: ViewContainerRef, context?: any): SpawnReference{
+  createComponent(componentType: any, viewContainerRef?: ViewContainerRef, context?: any): SpawnReference {
 
-    // Resolve the factory for incoming component `type`.
-    let factory = this.cfr.resolveComponentFactory(type);
+    const factory: ComponentFactory<any> = this.cfr.resolveComponentFactory(componentType);
 
-    // Create an instance of the component, and add it to the DOM
-    let componentRef;
-    if(vcr){
-      componentRef = vcr.createComponent(factory);
+    let componentRef: ComponentRef<any>;
+    if (viewContainerRef) {
+      componentRef = viewContainerRef.createComponent(factory);
     } else {
       componentRef = factory.create(this.injector);
       this.appRef.attachView(componentRef.hostView);
-      document.body.appendChild( (componentRef.hostView as any).rootNodes[0]);
+      document.body.appendChild((componentRef.hostView as any).rootNodes[0]);
     }
 
-    // Wire up the outputs, and get reference to un-wire outputs
-    let unsubs = this._wireOutputs(factory, componentRef, context);
-
-    // Turn the provided inputs into an observable (if not already an observable)
-    let observableSymbol = getSymbolObservable(window);
-    let context$;
-    if(context && context[observableSymbol]){
+    const subscriptions: Subscription[] = this.wireOutputs(factory, componentRef, context);
+    const observableSymbol: any = getSymbolObservable(window);
+    let context$: BehaviorSubject<any>;
+    if (context && context[observableSymbol]) {
       context$ = context;
     } else {
       context$ = new BehaviorSubject(context);
     }
 
-    // Subscribe to the new observable for updated input values
-    unsubs.push( context$.subscribe(()=>{
-      factory.inputs.forEach(i=>{
-        if(context[i.propName] !== undefined){
-          componentRef.instance[i.propName] = context[i.propName];
+    subscriptions.push(context$.subscribe(() => {
+      factory.inputs.forEach(input => {
+        if (context[input.propName] !== undefined) {
+          componentRef.instance[input.propName] = context[input.propName];
         }
-      })
-    }) );
+      });
+    }));
 
-    // This function will be returned to the caller, to be called when their context is destroyed
-    let detach = ()=>{
-      if (!vcr) {
+    const detach = () => {
+      if (!viewContainerRef) {
         this.appRef.detachView(componentRef.hostView);
       }
       componentRef.destroy();
-      unsubs.map(u => { if (!u.closed) { u.unsubscribe(); } });
+      subscriptions.map(subscription => { if (!subscription.closed) { subscription.unsubscribe(); } });
     };
 
-    // This function will be returned to the caller, to be called when there are new values for the inputs
-    let next = (data)=>{
-      if(context$ == context){
-        throw `When passing an observable as a context, you cannot call the \`.next\` function from the result. 
-                 If you wish to update the values in your context, send the data through the observable that you 
-                 passed in as the context.`;
+    const next = (data: any) => {
+      if (context$ === context) {
+        throw new Error(`When passing an observable as a context, you cannot call the \`.next\` function from the result.
+        If you wish to update the values in your context, send the data through the observable that you passed in as the context.`);
       }
+
       context$.next(data);
     };
 
     return {
       detach,
-      next,
-    }
+      next
+    };
   }
 
-  // Internal function to add event emitters for each of the provide outputs
-  _wireOutputs(factory: ComponentFactory<any>, componentRef: any, context: {[key:string]: any}): Array<Subscription>{
-    let unsubs = [];
-    factory.outputs.forEach(o=>{
-      if(context[o.propName] && context[o.propName] instanceof Function){
-        unsubs.push(componentRef.instance[o.propName].subscribe(context[o.propName]));
+  private wireOutputs(factory: ComponentFactory<any>, componentRef: ComponentRef<any>, context: { [key: string]: any }): Array<Subscription> {
+    const subscriptions: Subscription[] = [];
+    factory.outputs.forEach(output => {
+      if (context[output.propName] && context[output.propName] instanceof Function) {
+        subscriptions.push(componentRef.instance[output.propName].subscribe(context[output.propName]));
       }
     });
-    return unsubs;
+    return subscriptions;
   }
-
 }
